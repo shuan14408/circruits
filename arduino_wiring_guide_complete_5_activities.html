@@ -1,0 +1,320 @@
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.tab{padding:7px 12px;border-radius:var(--border-radius-md,8px);border:1px solid var(--color-border-tertiary,#ddd);background:var(--color-background-secondary,#f5f5f5);color:var(--color-text-secondary,#666);cursor:pointer;font-size:12px;font-weight:500;transition:all .2s}
+.tab.active{background:var(--color-background-info,#e6f1fb);color:var(--color-text-info,#185fa5);border-color:var(--color-border-info,#85b7eb)}
+.step-nav{display:flex;align-items:center;gap:8px;margin:8px 0}
+.step-btn{padding:6px 14px;border-radius:var(--border-radius-md,8px);border:1px solid var(--color-border-tertiary,#ddd);background:var(--color-background-secondary,#f5f5f5);color:var(--color-text-primary,#333);cursor:pointer;font-size:13px}
+.step-btn:hover{background:var(--color-background-info,#e6f1fb)}
+.step-btn:disabled{opacity:.35;cursor:default}
+.step-info{flex:1;font-size:13px;color:var(--color-text-secondary,#666);text-align:center}
+.card{border:1px solid var(--color-border-tertiary,#ddd);border-radius:var(--border-radius-lg,12px);padding:12px;margin:6px 0;background:var(--color-background-primary,#fff)}
+.wire-desc{font-size:14px;color:var(--color-text-primary,#333);line-height:1.7;padding:6px 0}
+.wire-desc b{color:var(--color-text-info,#185fa5)}
+.hl{background:var(--color-background-warning,#faeeda);padding:1px 5px;border-radius:4px;font-weight:500}
+.tip{font-size:12px;color:var(--color-text-warning,#854f0b);background:var(--color-background-warning,#faeeda);padding:8px 12px;border-radius:var(--border-radius-md,8px);margin:6px 0;line-height:1.6}
+.parts{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}
+.part{font-size:11px;padding:3px 8px;border-radius:20px;background:var(--color-background-secondary,#f5f5f5);color:var(--color-text-secondary,#666);border:1px solid var(--color-border-tertiary,#ddd)}
+</style>
+<div style="padding:2px 0">
+<div class="tabs" id="tabs"></div>
+<div id="parts-area"></div>
+<div class="step-nav">
+  <button class="step-btn" id="prev-btn" onclick="prevStep()">上一步</button>
+  <span class="step-info" id="step-info"></span>
+  <button class="step-btn" id="next-btn" onclick="nextStep()">下一步</button>
+</div>
+<div class="card" id="diagram-card">
+  <svg id="diagram" width="100%" viewBox="0 0 680 430"></svg>
+</div>
+<div class="wire-desc" id="wire-desc"></div>
+<div class="tip" id="tip-area"></div>
+</div>
+<script>
+const H=function(col,row){
+  const bx=120,by=30,sx=bx+12,gx=14;
+  const rm={a:0,b:1,c:2,d:3,e:4,f:5,g:6,h:7,i:8,j:9};
+  const x=sx+(col-1)*gx;
+  const y=rm[row]<5?by+40+rm[row]*18:by+148+(rm[row]-5)*18;
+  return{x,y};
+};
+const AX=120,AY=390,AW=440;
+function pinX(n){
+  const specials={GND:AX+15,GND2:AX+35,"5V":AX+55,"3.3V":AX+75,A0:AX+100,A1:AX+118,A2:AX+136};
+  if(specials[n]!==undefined)return specials[n];
+  return AX+AW-20-parseInt(n)*18;
+}
+function pinY(){return AY-4;}
+const hl=(cx,cy,r)=>`<circle cx="${cx}" cy="${cy}" r="${r||5}" fill="#FFD600" opacity="0.45"><animate attributeName="r" values="${r||5};${(r||5)+3};${r||5}" dur="1s" repeatCount="indefinite"/></circle>`;
+
+const activities=[
+{
+  name:"①LED閃爍",
+  parts:["Arduino Uno R3","麵包板","LED","220Ω 電阻"],
+  steps:[
+    {d:"<b>拖曳零件</b>：從右側面板搜尋 <span class='hl'>Arduino</span>，把 Arduino Uno R3 和麵包板拖到畫布上", t:"麵包板放在 Arduino 上方，留一點距離方便接線", w:[]},
+    {d:"<b>放 LED</b>：搜尋「LED」，長腳(+)插 <span class='hl'>e12</span>，短腳(-)插 <span class='hl'>e13</span>", t:"在 Tinkercad 裡把滑鼠移到 LED 腳上，會顯示哪隻是正極(Anode)哪隻是負極(Cathode)", w:["led"]},
+    {d:"<b>放電阻</b>：搜尋「電阻」，點擊改成 <span class='hl'>220Ω</span>。一端插 <span class='hl'>d12</span>（LED長腳同排），另一端插 <span class='hl'>d8</span>", t:"電阻沒有正負極，兩端隨便插都可以", w:["led","r1"]},
+    {d:"<b>接線①</b>：點 Arduino <span class='hl'>13 號腳</span> → 點麵包板 <span class='hl'>a8</span>（電阻另一端同排）", t:"點腳位後會自動拉出一條線，再點目標孔位就完成", w:["led","r1","w1"]},
+    {d:"<b>接線②</b>：點麵包板 <span class='hl'>a13</span>（LED短腳同排）→ 點 Arduino <span class='hl'>GND</span>", t:"GND 是接地，Arduino 板上標有 GND 的腳位", w:["led","r1","w1","w2"]},
+    {d:"<b>完成！</b>點上方「<span class='hl'>程式碼</span>」→ 下拉改「<span class='hl'>文字</span>」→ 貼上程式碼 → 按「<span class='hl'>開始模擬</span>」", t:"LED 每秒閃一次！如果沒亮，檢查 LED 長短腳有沒有反", w:["led","r1","w1","w2"]}
+  ]
+},
+{
+  name:"②按鈕LED",
+  parts:["Arduino Uno R3","麵包板","LED","220Ω 電阻","按鈕","10KΩ 電阻"],
+  steps:[
+    {d:"<b>先完成 LED 電路</b>：跟活動一一樣，LED 插 <span class='hl'>e12/e13</span>，220Ω 電阻 <span class='hl'>d12→d8</span>，接線 13號腳→a8，a13→GND", t:"如果你已經做好活動一，可以直接在上面加按鈕", w:["led","r1","w1","w2"]},
+    {d:"<b>放按鈕</b>：搜尋「按鈕」，把按鈕<span class='hl'>跨在溝槽上</span>。四隻腳分別插在 <span class='hl'>e20、e22、f20、f22</span>", t:"按鈕一定要跨在溝槽上！上面兩腳在 e 排，下面兩腳在 f 排，這樣按下時才會正確導通", w:["led","r1","w1","w2","btn"]},
+    {d:"<b>按鈕接 Arduino</b>：從 <span class='hl'>a20</span>（按鈕上方同排）拉線到 Arduino <span class='hl'>2 號腳</span>", t:"2 號腳是數位輸入腳，用來讀取按鈕狀態", w:["led","r1","w1","w2","btn","bw1"]},
+    {d:"<b>按鈕接電源</b>：從 <span class='hl'>j22</span>（按鈕下方同排）拉線到 Arduino <span class='hl'>5V</span>", t:"按下按鈕時，5V 電源會經過按鈕流到 2 號腳", w:["led","r1","w1","w2","btn","bw1","bw2"]},
+    {d:"<b>下拉電阻</b>：放一個 <span class='hl'>10KΩ 電阻</span>，一端插 <span class='hl'>c20</span>（跟2號腳同排），另一端插 <span class='hl'>c24</span>，再從 <span class='hl'>a24</span> 拉線到 <span class='hl'>GND</span>", t:"下拉電阻的作用：按鈕沒按的時候，確保2號腳讀到 LOW（不會亂飄）", w:["led","r1","w1","w2","btn","bw1","bw2","br","bw3"]},
+    {d:"<b>完成！</b>貼上 02_Button_LED.ino 程式碼 → 模擬。<span class='hl'>按住按鈕</span> LED 就亮，放開就滅！", t:"試試看把 if 裡面的 HIGH 和 LOW 對調，按鈕的功能就會反過來", w:["led","r1","w1","w2","btn","bw1","bw2","br","bw3"]}
+  ]
+},
+{
+  name:"③蜂鳴器",
+  parts:["Arduino Uno R3","麵包板","壓電蜂鳴器 (Piezo)"],
+  steps:[
+    {d:"<b>拖曳零件</b>：Arduino 和麵包板放好。搜尋「<span class='hl'>壓電</span>」找到蜂鳴器", t:"搜尋「壓電」或「piezo」就能找到", w:[]},
+    {d:"<b>放蜂鳴器</b>：正極(+)插 <span class='hl'>e20</span>，負極(-)插 <span class='hl'>e21</span>", t:"蜂鳴器上面有 + 號標記的那隻腳是正極", w:["buz"]},
+    {d:"<b>接線①</b>：<span class='hl'>a20</span>（正極同排）→ Arduino <span class='hl'>8 號腳</span>", t:"", w:["buz","zw1"]},
+    {d:"<b>接線②</b>：<span class='hl'>a21</span>（負極同排）→ Arduino <span class='hl'>GND</span>", t:"", w:["buz","zw1","zw2"]},
+    {d:"<b>完成！</b>貼上 03_Buzzer_Melody.ino → 模擬，聽到 Do Re Mi！", t:"改 tone() 裡的數字可以改音調：262=Do 294=Re 330=Mi 349=Fa 392=Sol 440=La 494=Si", w:["buz","zw1","zw2"]}
+  ]
+},
+{
+  name:"④光線感測",
+  parts:["Arduino Uno R3","麵包板","光敏電阻","10KΩ 電阻"],
+  steps:[
+    {d:"<b>拖曳零件</b>：Arduino 和麵包板放好。搜尋「<span class='hl'>光敏</span>」找到光敏電阻", t:"光敏電阻的圖示像一個有波浪線的電阻", w:[]},
+    {d:"<b>放光敏電阻</b>：兩隻腳分別插在 <span class='hl'>e15</span> 和 <span class='hl'>e17</span>", t:"光敏電阻沒有正負極，兩端都可以", w:["ldr"]},
+    {d:"<b>放 10KΩ 電阻</b>：一端插 <span class='hl'>d17</span>（光敏電阻同排），另一端插 <span class='hl'>d20</span>", t:"點擊電阻，把阻值改成 10KΩ（10000 Ω）", w:["ldr","lr"]},
+    {d:"<b>接線①</b>：<span class='hl'>a15</span>（光敏電阻一端）→ Arduino <span class='hl'>5V</span>", t:"5V 是 Arduino 提供的電源", w:["ldr","lr","lw1"]},
+    {d:"<b>接線②</b>：<span class='hl'>a17</span>（光敏電阻和10KΩ交接處）→ Arduino <span class='hl'>A0</span>", t:"A0 是類比輸入腳，能讀到 0~1023 的數值", w:["ldr","lr","lw1","lw2"]},
+    {d:"<b>接線③</b>：<span class='hl'>a20</span>（10KΩ另一端）→ Arduino <span class='hl'>GND</span>", t:"完成分壓電路：5V → 光敏電阻 → A0讀取點 → 10KΩ → GND", w:["ldr","lr","lw1","lw2","lw3"]},
+    {d:"<b>完成！</b>貼上 04_Light_Sensor.ino → 模擬 → 打開<span class='hl'>序列監視器</span>觀察數值。<span class='hl'>點擊光敏電阻</span>可以調亮暗！", t:"序列監視器在畫面下方。滑動光敏電阻的光線條，看數值怎麼變化", w:["ldr","lr","lw1","lw2","lw3"]}
+  ]
+},
+{
+  name:"⑤智慧小夜燈",
+  parts:["Arduino Uno R3","麵包板","LED","220Ω電阻","光敏電阻","10KΩ電阻","壓電蜂鳴器"],
+  steps:[
+    {d:"<b>準備所有零件</b>：這次要用到 7 個零件，先從右側面板全部找出來", t:"搜尋：LED、電阻(×2個)、光敏(光敏電阻)、壓電(蜂鳴器)", w:[]},
+    {d:"<b>LED 電路</b>：LED 長腳插 <span class='hl'>e5</span>，短腳插 <span class='hl'>e6</span>。220Ω 電阻從 <span class='hl'>d5</span> 到 <span class='hl'>d2</span>", t:"", w:["p-led","p-r1"]},
+    {d:"<b>LED 接線</b>：Arduino <span class='hl'>9 號腳</span> → <span class='hl'>a2</span>（電阻同排）。<span class='hl'>a6</span>（LED短腳）→ Arduino <span class='hl'>GND</span>", t:"用 9 號腳因為它支援 PWM 可以調亮度", w:["p-led","p-r1","p-w1","p-w2"]},
+    {d:"<b>光敏電阻</b>：插在 <span class='hl'>e15</span> 和 <span class='hl'>e17</span>。10KΩ 電阻從 <span class='hl'>d17</span> 到 <span class='hl'>d20</span>", t:"", w:["p-led","p-r1","p-w1","p-w2","p-ldr","p-r2"]},
+    {d:"<b>光敏電阻接線</b>：<span class='hl'>a15</span>→<span class='hl'>5V</span>，<span class='hl'>a17</span>→<span class='hl'>A0</span>，<span class='hl'>a20</span>→<span class='hl'>GND</span>", t:"跟活動四一模一樣的分壓電路", w:["p-led","p-r1","p-w1","p-w2","p-ldr","p-r2","p-w3","p-w4","p-w5"]},
+    {d:"<b>蜂鳴器</b>：正極插 <span class='hl'>e25</span>，負極插 <span class='hl'>e26</span>。<span class='hl'>a25</span>→<span class='hl'>8號腳</span>，<span class='hl'>a26</span>→<span class='hl'>GND</span>", t:"跟活動三一模一樣的蜂鳴器接法", w:["p-led","p-r1","p-w1","p-w2","p-ldr","p-r2","p-w3","p-w4","p-w5","p-buz","p-w6","p-w7"]},
+    {d:"<b>全部完成！</b>貼上 05_Smart_Night_Light.ino → 模擬。<span class='hl'>點擊光敏電阻</span>調暗光線，LED 自動亮！開機會聽到提示音！", t:"調整 threshold=500 這個數字可以改變靈敏度。數字越大越容易亮燈", w:["p-led","p-r1","p-w1","p-w2","p-ldr","p-r2","p-w3","p-w4","p-w5","p-buz","p-w6","p-w7"]}
+  ]
+}
+];
+
+let curA=0, curS=0;
+
+function drawBoard(){
+  let s='';
+  const bx=120,by=30,bw=440,bh=320;
+  s+=`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="6" fill="var(--color-background-secondary,#f0f0f0)" stroke="var(--color-border-secondary,#ccc)" stroke-width="1"/>`;
+  s+=`<text x="${bx+bw/2}" y="${by+14}" text-anchor="middle" fill="var(--color-text-tertiary)" font-size="10" font-family="var(--font-sans)">麵包板</text>`;
+  const sx=bx+12,gx=14,cols=30;
+  'abcde'.split('').forEach((c,r)=>{s+=`<text x="${sx-10}" y="${by+42+r*18}" text-anchor="middle" fill="var(--color-text-tertiary)" font-size="8" font-family="var(--font-sans)">${c}</text>`;});
+  'fghij'.split('').forEach((c,r)=>{s+=`<text x="${sx-10}" y="${by+150+r*18}" text-anchor="middle" fill="var(--color-text-tertiary)" font-size="8" font-family="var(--font-sans)">${c}</text>`;});
+  for(let c=0;c<cols;c++){
+    if(c%5===0)s+=`<text x="${sx+c*gx}" y="${by+26}" text-anchor="middle" fill="var(--color-text-tertiary)" font-size="7" font-family="var(--font-sans)">${c+1}</text>`;
+    for(let r=0;r<5;r++)s+=`<circle cx="${sx+c*gx}" cy="${by+40+r*18}" r="2.3" fill="var(--color-border-secondary,#bbb)"/>`;
+    for(let r=0;r<5;r++)s+=`<circle cx="${sx+c*gx}" cy="${by+148+r*18}" r="2.3" fill="var(--color-border-secondary,#bbb)"/>`;
+  }
+  s+=`<rect x="${sx-4}" y="${by+128}" width="${29*gx+8}" height="10" rx="2" fill="var(--color-background-tertiary,#e0e0e0)"/>`;
+  s+=`<text x="${bx+bw/2}" y="${by+136}" text-anchor="middle" fill="var(--color-text-tertiary)" font-size="7" font-family="var(--font-sans)">溝 槽</text>`;
+  return s;
+}
+
+function drawArduino(){
+  let s='';
+  s+=`<rect x="${AX}" y="${AY}" width="${AW}" height="35" rx="4" fill="#0D47A1" stroke="#0a3a80" stroke-width="1"/>`;
+  s+=`<text x="${AX+AW/2}" y="${AY+19}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="12" font-weight="500" font-family="var(--font-sans)">Arduino Uno R3</text>`;
+  [{n:"GND",x:AX+15},{n:"GND",x:AX+35},{n:"5V",x:AX+55},{n:"3.3V",x:AX+75},{n:"A0",x:AX+100},{n:"A1",x:AX+118}].forEach(p=>{
+    s+=`<circle cx="${p.x}" cy="${AY-4}" r="4" fill="#FFD600" stroke="#0D47A1" stroke-width="1"/>`;
+    s+=`<text x="${p.x}" y="${AY-13}" text-anchor="middle" fill="var(--color-text-secondary)" font-size="7" font-family="var(--font-sans)">${p.n}</text>`;
+  });
+  for(let i=0;i<=13;i++){
+    const x=AX+AW-20-i*18;
+    s+=`<circle cx="${x}" cy="${AY-4}" r="4" fill="#90CAF9" stroke="#0D47A1" stroke-width="1"/>`;
+    s+=`<text x="${x}" y="${AY-13}" text-anchor="middle" fill="var(--color-text-secondary)" font-size="7" font-family="var(--font-sans)">${i}</text>`;
+  }
+  return s;
+}
+
+function wire(fx,fy,tx,ty,col,label,offY){
+  let s=`<path d="M${fx} ${fy} L${fx} ${fy+(offY||100)} L${tx} ${ty}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round"/>`;
+  if(label)s+=`<text x="${tx}" y="${ty+16}" text-anchor="middle" fill="${col}" font-size="7" font-family="var(--font-sans)">${label}</text>`;
+  s+=hl(fx,fy)+hl(tx,ty);
+  return s;
+}
+
+function comp(act,vis){
+  let s='';
+  // Act 0: LED blink
+  if(act===0){
+    if(vis.includes('led')){
+      const a=H(12,'e'),b=H(13,'e');
+      s+=`<line x1="${a.x}" y1="${a.y-8}" x2="${a.x}" y2="${a.y+2}" stroke="#E53935" stroke-width="3" stroke-linecap="round"/>`;
+      s+=`<circle cx="${a.x}" cy="${a.y-10}" r="5" fill="#FF5252" opacity="0.8"/>`;
+      s+=`<line x1="${b.x}" y1="${b.y-6}" x2="${b.x}" y2="${b.y+2}" stroke="#777" stroke-width="2.5" stroke-linecap="round"/>`;
+      s+=`<text x="${a.x+4}" y="${a.y-18}" text-anchor="middle" fill="#E53935" font-size="8" font-family="var(--font-sans)">LED</text>`;
+      s+=hl(a.x,a.y)+hl(b.x,b.y);
+    }
+    if(vis.includes('r1')){
+      const a=H(12,'d'),b=H(8,'d');
+      s+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#8D6E63" stroke-width="3" stroke-linecap="round"/>`;
+      s+=`<rect x="${(a.x+b.x)/2-12}" y="${a.y-5}" width="24" height="10" rx="3" fill="#A1887F"/>`;
+      s+=`<text x="${(a.x+b.x)/2}" y="${a.y+16}" text-anchor="middle" fill="var(--color-text-secondary)" font-size="7" font-family="var(--font-sans)">220Ω</text>`;
+      s+=hl(a.x,a.y)+hl(b.x,b.y);
+    }
+    if(vis.includes('w1'))s+=wire(H(8,'a').x,H(8,'a').y,pinX('13'),pinY(),'#FF9800','pin 13',130);
+    if(vis.includes('w2'))s+=wire(H(13,'a').x,H(13,'a').y,pinX('GND'),pinY(),'#555','GND',100);
+  }
+  // Act 1: Button LED
+  if(act===1){
+    if(vis.includes('led')){
+      const a=H(12,'e'),b=H(13,'e');
+      s+=`<line x1="${a.x}" y1="${a.y-8}" x2="${a.x}" y2="${a.y+2}" stroke="#E53935" stroke-width="3" stroke-linecap="round"/>`;
+      s+=`<circle cx="${a.x}" cy="${a.y-10}" r="5" fill="#FF5252" opacity="0.8"/>`;
+      s+=`<line x1="${b.x}" y1="${b.y-6}" x2="${b.x}" y2="${b.y+2}" stroke="#777" stroke-width="2.5" stroke-linecap="round"/>`;
+      s+=`<text x="${a.x+4}" y="${a.y-18}" text-anchor="middle" fill="#E53935" font-size="8" font-family="var(--font-sans)">LED</text>`;
+    }
+    if(vis.includes('r1')){
+      const a=H(12,'d'),b=H(8,'d');
+      s+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#8D6E63" stroke-width="3" stroke-linecap="round"/>`;
+      s+=`<rect x="${(a.x+b.x)/2-12}" y="${a.y-5}" width="24" height="10" rx="3" fill="#A1887F"/>`;
+      s+=`<text x="${(a.x+b.x)/2}" y="${a.y+16}" text-anchor="middle" fill="var(--color-text-secondary)" font-size="7" font-family="var(--font-sans)">220Ω</text>`;
+    }
+    if(vis.includes('w1'))s+=wire(H(8,'a').x,H(8,'a').y,pinX('13'),pinY(),'#FF9800','pin 13',140);
+    if(vis.includes('w2'))s+=wire(H(13,'a').x,H(13,'a').y,pinX('GND'),pinY(),'#555','GND',110);
+    if(vis.includes('btn')){
+      const e20=H(20,'e'),e22=H(22,'e'),f20=H(20,'f'),f22=H(22,'f');
+      s+=`<rect x="${e20.x-3}" y="${e20.y-3}" width="${e22.x-e20.x+6}" height="${f22.y-e20.y+6}" rx="3" fill="#555" stroke="#333" stroke-width="1"/>`;
+      s+=`<circle cx="${(e20.x+e22.x)/2}" cy="${(e20.y+f20.y)/2}" r="6" fill="#888" stroke="#aaa" stroke-width="1"/>`;
+      s+=`<text x="${(e20.x+e22.x)/2}" y="${e20.y-10}" text-anchor="middle" fill="var(--color-text-secondary)" font-size="8" font-family="var(--font-sans)">按鈕</text>`;
+      s+=hl(e20.x,e20.y)+hl(e22.x,e22.y)+hl(f20.x,f20.y)+hl(f22.x,f22.y);
+    }
+    if(vis.includes('bw1'))s+=wire(H(20,'a').x,H(20,'a').y,pinX('2'),pinY(),'#2196F3','pin 2',120);
+    if(vis.includes('bw2'))s+=wire(H(22,'j').x,H(22,'j').y,pinX('5V'),pinY(),'#E53935','5V',60);
+    if(vis.includes('br')){
+      const a=H(20,'c'),b=H(24,'c');
+      s+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#8D6E63" stroke-width="3" stroke-linecap="round"/>`;
+      s+=`<rect x="${(a.x+b.x)/2-10}" y="${a.y-5}" width="20" height="10" rx="3" fill="#795548"/>`;
+      s+=`<text x="${(a.x+b.x)/2}" y="${a.y+16}" text-anchor="middle" fill="var(--color-text-secondary)" font-size="7" font-family="var(--font-sans)">10KΩ</text>`;
+      s+=hl(a.x,a.y)+hl(b.x,b.y);
+    }
+    if(vis.includes('bw3'))s+=wire(H(24,'a').x,H(24,'a').y,pinX('GND2'),pinY(),'#555','GND',90);
+  }
+  // Act 2: Buzzer
+  if(act===2){
+    if(vis.includes('buz')){
+      const a=H(20,'e'),b=H(21,'e');
+      s+=`<circle cx="${(a.x+b.x)/2}" cy="${a.y-3}" r="10" fill="#333" stroke="#555" stroke-width="1"/>`;
+      s+=`<text x="${(a.x+b.x)/2}" y="${a.y-18}" text-anchor="middle" fill="var(--color-text-secondary)" font-size="8" font-family="var(--font-sans)">蜂鳴器</text>`;
+      s+=`<text x="${a.x}" y="${a.y+12}" text-anchor="middle" fill="#4CAF50" font-size="8" font-family="var(--font-sans)">+</text>`;
+      s+=`<text x="${b.x}" y="${b.y+12}" text-anchor="middle" fill="#E53935" font-size="8" font-family="var(--font-sans)">−</text>`;
+      s+=hl(a.x,a.y)+hl(b.x,b.y);
+    }
+    if(vis.includes('zw1'))s+=wire(H(20,'a').x,H(20,'a').y,pinX('8'),pinY(),'#FF9800','pin 8',110);
+    if(vis.includes('zw2'))s+=wire(H(21,'a').x,H(21,'a').y,pinX('GND'),pinY(),'#555','GND',130);
+  }
+  // Act 3: Light sensor
+  if(act===3){
+    if(vis.includes('ldr')){
+      const a=H(15,'e'),b=H(17,'e');
+      s+=`<circle cx="${(a.x+b.x)/2}" cy="${a.y-2}" r="8" fill="#CDDC39" stroke="#9E9D24" stroke-width="1"/>`;
+      s+=`<line x1="${(a.x+b.x)/2-4}" y1="${a.y-6}" x2="${(a.x+b.x)/2+4}" y2="${a.y+2}" stroke="#7CB342" stroke-width="1.5"/>`;
+      s+=`<text x="${(a.x+b.x)/2}" y="${a.y-16}" text-anchor="middle" fill="#9E9D24" font-size="8" font-family="var(--font-sans)">光敏電阻</text>`;
+      s+=hl(a.x,a.y)+hl(b.x,b.y);
+    }
+    if(vis.includes('lr')){
+      const a=H(17,'d'),b=H(20,'d');
+      s+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#8D6E63" stroke-width="3" stroke-linecap="round"/>`;
+      s+=`<rect x="${(a.x+b.x)/2-10}" y="${a.y-5}" width="20" height="10" rx="3" fill="#795548"/>`;
+      s+=`<text x="${(a.x+b.x)/2}" y="${a.y+16}" text-anchor="middle" fill="var(--color-text-secondary)" font-size="7" font-family="var(--font-sans)">10KΩ</text>`;
+      s+=hl(a.x,a.y)+hl(b.x,b.y);
+    }
+    if(vis.includes('lw1'))s+=wire(H(15,'a').x,H(15,'a').y,pinX('5V'),pinY(),'#E53935','5V',110);
+    if(vis.includes('lw2'))s+=wire(H(17,'a').x,H(17,'a').y,pinX('A0'),pinY(),'#4CAF50','A0',130);
+    if(vis.includes('lw3'))s+=wire(H(20,'a').x,H(20,'a').y,pinX('GND'),pinY(),'#555','GND',100);
+  }
+  // Act 4: Smart night light
+  if(act===4){
+    if(vis.includes('p-led')){
+      const a=H(5,'e'),b=H(6,'e');
+      s+=`<line x1="${a.x}" y1="${a.y-8}" x2="${a.x}" y2="${a.y+2}" stroke="#E53935" stroke-width="3" stroke-linecap="round"/>`;
+      s+=`<circle cx="${a.x}" cy="${a.y-10}" r="5" fill="#FF5252" opacity="0.8"/>`;
+      s+=`<line x1="${b.x}" y1="${b.y-6}" x2="${b.x}" y2="${b.y+2}" stroke="#777" stroke-width="2.5" stroke-linecap="round"/>`;
+      s+=`<text x="${a.x+4}" y="${a.y-18}" text-anchor="middle" fill="#E53935" font-size="8" font-family="var(--font-sans)">LED</text>`;
+    }
+    if(vis.includes('p-r1')){
+      const a=H(5,'d'),b=H(2,'d');
+      s+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#8D6E63" stroke-width="3" stroke-linecap="round"/>`;
+      s+=`<rect x="${(a.x+b.x)/2-10}" y="${a.y-5}" width="20" height="10" rx="3" fill="#A1887F"/>`;
+      s+=`<text x="${(a.x+b.x)/2}" y="${a.y+16}" text-anchor="middle" fill="var(--color-text-secondary)" font-size="7" font-family="var(--font-sans)">220Ω</text>`;
+    }
+    if(vis.includes('p-w1'))s+=wire(H(2,'a').x,H(2,'a').y,pinX('9'),pinY(),'#FF9800','pin 9',140);
+    if(vis.includes('p-w2'))s+=wire(H(6,'a').x,H(6,'a').y,pinX('GND'),pinY(),'#555','GND',110);
+    if(vis.includes('p-ldr')){
+      const a=H(15,'e'),b=H(17,'e');
+      s+=`<circle cx="${(a.x+b.x)/2}" cy="${a.y-2}" r="8" fill="#CDDC39" stroke="#9E9D24" stroke-width="1"/>`;
+      s+=`<text x="${(a.x+b.x)/2}" y="${a.y-16}" text-anchor="middle" fill="#9E9D24" font-size="8" font-family="var(--font-sans)">光敏電阻</text>`;
+    }
+    if(vis.includes('p-r2')){
+      const a=H(17,'d'),b=H(20,'d');
+      s+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#8D6E63" stroke-width="3" stroke-linecap="round"/>`;
+      s+=`<rect x="${(a.x+b.x)/2-10}" y="${a.y-5}" width="20" height="10" rx="3" fill="#795548"/>`;
+      s+=`<text x="${(a.x+b.x)/2}" y="${a.y+16}" text-anchor="middle" fill="var(--color-text-secondary)" font-size="7" font-family="var(--font-sans)">10KΩ</text>`;
+    }
+    if(vis.includes('p-w3'))s+=wire(H(15,'a').x,H(15,'a').y,pinX('5V'),pinY(),'#E53935','5V',115);
+    if(vis.includes('p-w4'))s+=wire(H(17,'a').x,H(17,'a').y,pinX('A0'),pinY(),'#4CAF50','A0',135);
+    if(vis.includes('p-w5'))s+=wire(H(20,'a').x,H(20,'a').y,pinX('GND2'),pinY(),'#555','GND',95);
+    if(vis.includes('p-buz')){
+      const a=H(25,'e'),b=H(26,'e');
+      s+=`<circle cx="${(a.x+b.x)/2}" cy="${a.y-3}" r="9" fill="#333" stroke="#555" stroke-width="1"/>`;
+      s+=`<text x="${(a.x+b.x)/2}" y="${a.y-18}" text-anchor="middle" fill="var(--color-text-secondary)" font-size="8" font-family="var(--font-sans)">蜂鳴器</text>`;
+    }
+    if(vis.includes('p-w6'))s+=wire(H(25,'a').x,H(25,'a').y,pinX('8'),pinY(),'#2196F3','pin 8',105);
+    if(vis.includes('p-w7'))s+=wire(H(26,'a').x,H(26,'a').y,pinX('GND'),pinY()+10,'#777','GND',80);
+  }
+  return s;
+}
+
+function render(){
+  const act=activities[curA], step=act.steps[curS];
+  document.getElementById('diagram').innerHTML=drawBoard()+drawArduino()+comp(curA,step.w);
+  document.getElementById('wire-desc').innerHTML=step.d;
+  document.getElementById('tip-area').textContent=step.t||'';
+  document.getElementById('tip-area').style.display=step.t?'block':'none';
+  document.getElementById('step-info').textContent=`步驟 ${curS+1} / ${act.steps.length}`;
+  document.getElementById('prev-btn').disabled=curS===0;
+  document.getElementById('next-btn').disabled=curS===act.steps.length-1;
+  let ph='<div class="parts">';
+  act.parts.forEach(p=>ph+=`<span class="part">${p}</span>`);
+  ph+='</div>';
+  document.getElementById('parts-area').innerHTML=ph;
+}
+
+function renderTabs(){
+  const el=document.getElementById('tabs');
+  el.innerHTML='';
+  activities.forEach((a,i)=>{
+    const d=document.createElement('div');
+    d.className='tab'+(i===curA?' active':'');
+    d.textContent=a.name;
+    d.onclick=()=>{curA=i;curS=0;renderTabs();render();};
+    el.appendChild(d);
+  });
+}
+
+function nextStep(){if(curS<activities[curA].steps.length-1){curS++;render();}}
+function prevStep(){if(curS>0){curS--;render();}}
+
+renderTabs();render();
+</script>
